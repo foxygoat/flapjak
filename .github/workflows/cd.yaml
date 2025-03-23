@@ -1,0 +1,30 @@
+name: cd
+
+on:
+  push:
+    branches: [ master ]
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yaml
+
+  release:
+    runs-on: ubuntu-latest
+    needs: [ ci ]
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: ./bin/make release
+
+  howl-on-fail:
+    runs-on: ubuntu-latest
+    needs: [ ci, release ]
+    if: failure()
+    steps:
+    - uses: foxygoat/howl@v1
+      env:
+        SLACK_TOKEN: ${{ secrets.SLACK_TOKEN }}
+        SLACK_TEXT: <!here|here>
