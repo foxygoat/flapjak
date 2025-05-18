@@ -42,3 +42,9 @@ linters:
     - wastedassign
     - wrapcheck
     - wsl
+
+linters-settings:
+  gocritic:
+    disabled-checks:
+      - appendAssign # Perfectly valid to assign to a different var
+      - ifElseChain # This is taste and cannot be determined automatically

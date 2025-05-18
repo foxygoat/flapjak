@@ -3,7 +3,7 @@
 
 # --- Global -------------------------------------------------------------------
 O = out
-COVERAGE = 0
+COVERAGE = 52
 VERSION ?= $(shell git describe --tags --dirty --always)
 
 ## Build and lint
@@ -45,6 +45,26 @@ tidy:
 	go mod tidy
 
 .PHONY: build tidy
+
+# --- Test ---------------------------------------------------------------------
+COVERFILE = $(O)/coverage.txt
+
+## Run tests and generate a coverage file
+test: | $(O)
+	go test -coverprofile=$(COVERFILE) ./...
+
+## Check that test coverage meets the required level
+check-coverage: test
+	@go tool cover -func=$(COVERFILE) | $(CHECK_COVERAGE) || $(FAIL_COVERAGE)
+
+## Show test coverage in your browser
+cover: test
+	go tool cover -html=$(COVERFILE)
+
+CHECK_COVERAGE = awk -F '[ \t%]+' '/^total:/ {print; if ($$3 < $(COVERAGE)) exit 1}'
+FAIL_COVERAGE = { echo '$(COLOUR_RED)FAIL - Coverage below $(COVERAGE)%$(COLOUR_NORMAL)'; exit 1; }
+
+.PHONY: check-coverage cover test
 
 # --- Lint ---------------------------------------------------------------------
 ## Lint go source code
