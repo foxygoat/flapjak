@@ -3,7 +3,7 @@
 
 # --- Global -------------------------------------------------------------------
 O = out
-COVERAGE = 54
+COVERAGE = 63
 VERSION ?= $(shell git describe --tags --dirty --always)
 
 ## Build and lint

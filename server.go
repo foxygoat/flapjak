@@ -87,6 +87,13 @@ func (s *Server) handleSearch(w *gldap.ResponseWriter, r *gldap.Request) {
 		return
 	}
 
+	f, err := Parse(req.Filter)
+	if err != nil {
+		slog.Error("invalid filter", "filter", req.Filter, "error", err)
+		resp.SetResultCode(gldap.ResultFilterError)
+		return
+	}
+
 	var nodeIter iter.Seq[*DITNode]
 
 	switch req.Scope {
@@ -102,7 +109,7 @@ func (s *Server) handleSearch(w *gldap.ResponseWriter, r *gldap.Request) {
 	// https://ldap.com/ldapv3-wire-protocol-reference-search/
 	for node := range nodeIter {
 		e := node.Entry
-		if !filterMatches(req.Filter, e) {
+		if !f.Match(e) {
 			continue
 		}
 		// TODO: filter attributes based in req.Attributes,
@@ -122,8 +129,4 @@ func (s *Server) handleSearch(w *gldap.ResponseWriter, r *gldap.Request) {
 	}
 
 	resp.SetResultCode(gldap.ResultSuccess)
-}
-
-func filterMatches(filter string, entry *Entry) bool {
-	return true
 }
