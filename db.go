@@ -62,6 +62,15 @@ func (a Attr) HasValue(val string) bool {
 	return slices.Contains(a.Vals, val)
 }
 
+// IsSensitive returns true if the attribute is a sensitive one, such as a
+// hashed password that should not be returned in a search without some sort of
+// permission controls. Usually this information of sensitivity would belong in
+// the schema or some separate permissions config, but we have neither, so this
+// is hardcoded for now.
+func (a Attr) IsSensitive() bool {
+	return strings.ToLower(a.Name) == "userpassword"
+}
+
 // DITNode is a node in the Directory Information Tree (DIT), the hierarchical
 // index of entries indexed by DN. Often an LDAP search is performed relative
 // to a BaseDN. The DIT allows a search to be constrained to a sub-tree of the

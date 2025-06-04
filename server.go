@@ -5,6 +5,7 @@ import (
 	"iter"
 	"log/slog"
 	"maps"
+	"slices"
 
 	"github.com/jimlambrt/gldap"
 )
@@ -103,6 +104,10 @@ func (s *Server) handleSearch(w *gldap.ResponseWriter, r *gldap.Request) {
 		nodeIter = base.Children()
 	case gldap.WholeSubtree:
 		nodeIter = base.All()
+	default:
+		slog.Error("unsupported scope", "scope", req.Scope)
+		resp.SetResultCode(gldap.ResultNotSupported)
+		return
 	}
 
 	// Each entry is a separate search response
@@ -112,13 +117,19 @@ func (s *Server) handleSearch(w *gldap.ResponseWriter, r *gldap.Request) {
 		if !f.Match(e) {
 			continue
 		}
-		// TODO: filter attributes based in req.Attributes,
-		// filter attribute values based on req.TypesOnly,
-		// filter entrires, attributes and values based on permissions.
+		// TODO: filter entries, attributes and values based on permissions.
 
+		attrs := maps.Keys(e.Attrs)
+		if len(req.Attributes) > 0 && req.Attributes[0] != "*" {
+			attrs = slices.Values(req.Attributes)
+		}
 		attrMap := map[string][]string{}
-		for a := range maps.Values(e.Attrs) {
-			attrMap[a.Name] = a.Vals
+		for attrName := range attrs {
+			if a, ok := e.GetAttr(attrName); ok {
+				if !a.IsSensitive() {
+					attrMap[a.Name] = If(req.TypesOnly, nil, a.Vals)
+				}
+			}
 		}
 
 		re := r.NewSearchResponseEntry(e.DN.String(), gldap.WithAttributes(attrMap))
@@ -129,4 +140,16 @@ func (s *Server) handleSearch(w *gldap.ResponseWriter, r *gldap.Request) {
 	}
 
 	resp.SetResultCode(gldap.ResultSuccess)
+}
+
+// If is a simple ternary operator function that returns ifTrue if cond is true
+// and ifFalse if it is not. It is intended to be used only with values that
+// have no side-effects as both ifTrue and ifFalse are evaluated before being
+// passed to this function. It should really only be used to select between
+// two variables or values.
+func If[T any](cond bool, ifTrue T, ifFalse T) T {
+	if cond {
+		return ifTrue
+	}
+	return ifFalse
 }
