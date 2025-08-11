@@ -1,0 +1,44 @@
+issues:
+  exclude-use-default: false
+  exclude:
+    - "^don't use ALL_CAPS"
+    - "^ST1003: should not use ALL_CAPS"
+    - "^G304: Potential file inclusion via variable"
+  exclude-rules:
+    # Dynamic errors are OK in main (top-level dir). Packages should use sentinels.
+    - path: "^[^/]*$"
+      linters:
+        - err113
+
+linters:
+  enable-all: true
+  disable:
+    - cyclop
+    - depguard
+    - exhaustive
+    - exhaustruct
+    - forbidigo
+    - forcetypeassert
+    - funlen
+    - gci
+    - gochecknoglobals
+    - gocognit
+    - goconst
+    - gocyclo
+    - godox
+    - ireturn
+    - lll
+    - mnd
+    - nlreturn
+    - nonamedreturns
+    - paralleltest
+    - revive
+    - rowserrcheck
+    - sqlclosecheck
+    - tagalign
+    - tenv
+    - testpackage
+    - varnamelen
+    - wastedassign
+    - wrapcheck
+    - wsl
