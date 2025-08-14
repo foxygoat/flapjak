@@ -1,0 +1,9 @@
+[
+  {
+    "dn": "example",
+    "objectClass": "top",
+    "value": {
+      "invalid": "nested not allowed"
+    }
+  }
+]

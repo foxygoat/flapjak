@@ -1,0 +1,12 @@
+[
+  {
+    "dn": "o=example,dc=example,dc=com",
+    "objectClass": ["top", "Organization"],
+    "o": "Example Corp"
+  },
+  {
+    "dn": "ou=people,o=example,dc=example,dc=com",
+    "objectClass": ["top", "organizationalUnit"],
+    "ou": "people"
+  }
+]
