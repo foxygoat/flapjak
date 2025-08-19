@@ -29,6 +29,7 @@ linters:
     - ireturn
     - lll
     - mnd
+    - nestif
     - nlreturn
     - nonamedreturns
     - paralleltest
@@ -48,3 +49,4 @@ linters-settings:
     disabled-checks:
       - appendAssign # Perfectly valid to assign to a different var
       - ifElseChain # This is taste and cannot be determined automatically
+      - dupArg # False positive with self-equality tests, not useful either

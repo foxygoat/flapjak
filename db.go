@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"iter"
 	"slices"
@@ -19,17 +20,46 @@ type DB struct {
 // attributes that have multiple values. In an LDAP entry, attributes can
 // appear multiple times, requiring a slice of values for each named attribute.
 type Entry struct {
-	DN    DN
-	Attrs map[string][]string
+	// DN is the distinguished name of the entry.
+	DN DN
+	// Attrs maps the lower-case attribute name to the attribute, so that
+	// attributes can be looked-up case-insensitively.
+	Attrs map[string]Attr
+}
+
+// Attr is an attribute of an Entry.
+type Attr struct {
+	// Name is the canonical name of an attribute, preserving the
+	// case as originally entered into the database.
+	Name string
+	// Vals are the values of an attribute. Currently all attribute
+	// values are stored (and returned) as strings.
+	Vals []string
+}
+
+// AddAttr adds attr to e. It can be retrieved with GetAttr. The name
+// of the attribute is case-insensitive for lookups. If the attribute
+// already exists with the same case-insensitive name, the existing
+// attribute will be replaced.
+func (e *Entry) AddAttr(attr Attr) {
+	e.Attrs[strings.ToLower(attr.Name)] = attr
 }
 
 // GetAttr returns the attribute values for the given attribute name and true
 // if the attribute exists, or an empty slice and false if it does not.
-func (e *Entry) GetAttr(attr string) ([]string, bool) {
-	// TODO(camh): Make lookup case-insensitive
+// The attribute name is case-insensitive.
+func (e *Entry) GetAttr(attr string) (Attr, bool) {
 	// TODO(camh): Support lookup by OID
-	v, ok := e.Attrs[attr]
+	v, ok := e.Attrs[strings.ToLower(attr)]
 	return v, ok
+}
+
+// HasValue returns true if val is one of the values of the attribute. The
+// value is compared case-sensitively, regardless of what an LDAP schema
+// may say for that attribute.
+func (a Attr) HasValue(val string) bool {
+	// TODO(camh): Handle case-insensitive values
+	return slices.Contains(a.Vals, val)
 }
 
 // DITNode is a node in the Directory Information Tree (DIT), the hierarchical
@@ -41,11 +71,17 @@ type DITNode struct {
 	children []*DITNode
 }
 
-// DN is a decomposed DN string, where each element of the DN is broken out. DN
-// strings are comma-separated DN string components. The order of the
-// components is tree-traversal order - i.e. top-level first, so the DN
-// ou=people,dc=example,dc=com is ["dc=com", "dc=example", "ou=people"].
-type DN []string
+// RDN (Relative Distinguished Name) is a single element of a DN (Distinguished
+// Name) and is a name/value pair specifying an attribute name and value. Multi-
+// valued RDNs are not supported. When compared, RDN names are case-insensitive.
+// Values are case-sensitive. In string form, RDNs are of the form "name=value"
+// with possible whitespace around the "=", which is stripped when parsed.
+type RDN struct{ Name, Value string }
+
+// DN is a parsed DN string into a slice of RDNs, in the reverse order they
+// are in the string. Each RDN is separated by a comma and may contain
+// whitespace around the comma, which is stripped.
+type DN []RDN
 
 // NewDB returns a new DB with a single root entry for the DIT for the server's
 // Directory Server Entry ([DSE]) (or is it DSA-Specific Entry?).
@@ -57,8 +93,8 @@ func NewDB() *DB {
 	dse := DITNode{
 		Entry: &Entry{
 			DN: DN{},
-			Attrs: map[string][]string{
-				"objectClass": {"top"},
+			Attrs: map[string]Attr{
+				"objectClass": {"objectClass", []string{"top"}},
 			},
 		},
 	}
@@ -131,7 +167,7 @@ func (dit *DITNode) String() string {
 func (dit *DITNode) str(parent DN, level int) string {
 	indent := 0
 	s := ""
-	if !dit.Entry.DN.IsRoot() {
+	if !dit.Entry.DN.IsEmpty() {
 		s = fmt.Sprintf("%*s%s\n", level, "", dit.Entry.DN.Tail(parent))
 		indent = 2
 	}
@@ -177,33 +213,87 @@ func (dit *DITNode) walk(yield func(*DITNode) bool) bool {
 	return true
 }
 
-// NewDN constructs a DN from the given string representing a DN.
-func NewDN(dnstr string) DN {
+// ParseRDN parse a RDN string value, returning an RDN or an error if it could
+// not be parsed. The format must be "name=value" with optional whitespace
+// around the "=". name is mandatory. value may be omitted.
+func ParseRDN(rdn string) (RDN, error) {
+	name, val, ok := strings.Cut(rdn, "=")
+	if !ok {
+		return RDN{}, fmt.Errorf("invalid rdn: %v", rdn)
+	}
+	result := RDN{Name: strings.TrimSpace(name), Value: strings.TrimSpace(val)}
+	if result.Name == "" {
+		return RDN{}, fmt.Errorf("no attribute name in rdn: %v", rdn)
+	}
+	return result, nil
+}
+
+// String returns rdn in string form. It implements the [fmt.Stringer]
+// interface.
+func (rdn RDN) String() string {
+	return rdn.Name + "=" + rdn.Value
+}
+
+// Equal compares rdn to rhs returning true if they are equal and false if not.
+// The attribute name of the RDNs are compared case-insensitively. The values
+// are compared case-sensitively if the names compare equal.
+func (rdn RDN) Equal(rhs RDN) bool {
+	if !strings.EqualFold(rdn.Name, rhs.Name) {
+		return false
+	}
+	// TODO(camh): Handle case-insensitive attribute values where appropriate
+	return rdn.Value == rhs.Value
+}
+
+// Compare compares rdn to rhs returning -1 if rdn orders before rhs, 1 if it
+// orders after it and 0 if the are equal. The attribute names are compared
+// case-insensitively. The values are compared case-sensitively if the names
+// compare equal. Compare can be used as a comparison function for
+// [slices.CompareFunc] and similar functions.
+func (rdn RDN) Compare(rhs RDN) int {
+	lname, rname := strings.ToLower(rdn.Name), strings.ToLower(rhs.Name)
+	switch {
+	case lname < rname:
+		return -1
+	case lname > rname:
+		return +1
+	default:
+		// TODO(camh): Handle case-insensitive attribute values where appropriate
+		return strings.Compare(rdn.Value, rhs.Value)
+	}
+}
+
+// NewDN constructs a DN from the given string representing a DN. If any of the
+// RDN components in the DN string are invalid (see [ParseRDN]), an error is
+// returned.
+func NewDN(dnstr string) (DN, error) {
 	dnstr = strings.TrimSpace(dnstr)
 	if dnstr == "" {
-		return []string{}
+		// The empty DN string is the root DN.
+		return DN{}, nil
 	}
-	dn := strings.Split(dnstr, ",")
-	result := make(DN, 0, len(dn))
-	for _, rdn := range dn {
-		if attr, val, ok := strings.Cut(rdn, "="); ok {
-			rdn = strings.TrimSpace(attr) + "=" + strings.TrimSpace(val)
+
+	elems := strings.Split(dnstr, ",")
+	result := make(DN, 0, len(elems))
+	for i := len(elems) - 1; i >= 0; i-- {
+		rdn, err := ParseRDN(elems[i])
+		if err != nil {
+			return nil, err
 		}
 		result = append(result, rdn)
 		// TODO(camh): backslash de-escaping
-		// TODO(camh): multi-valued RDNs
 	}
-
-	slices.Reverse(result)
-	return result
+	return result, nil
 }
 
 // String formats dn into a string representation of the DN and returns it.
 func (dn DN) String() string {
 	// TODO(camh): escape chars (RFC 4514)
-	clone := slices.Clone(dn)
-	slices.Reverse(clone)
-	return strings.Join(clone, ",")
+	elems := make([]string, 0, len(dn))
+	for i := len(dn) - 1; i >= 0; i-- {
+		elems = append(elems, dn[i].String())
+	}
+	return strings.Join(elems, ",")
 }
 
 // IsAncestor returns whether sub is an ancestor of dn. A sub is an ancestor
@@ -213,7 +303,7 @@ func (dn DN) IsAncestor(sub DN) bool {
 		return false
 	}
 	for i := range dn {
-		if dn[i] != sub[i] {
+		if !dn[i].Equal(sub[i]) {
 			return false
 		}
 	}
@@ -222,7 +312,7 @@ func (dn DN) IsAncestor(sub DN) bool {
 
 // Equal returns true if dn is equal to rhs.
 func (dn DN) Equal(rhs DN) bool {
-	return slices.Equal(dn, rhs)
+	return slices.EqualFunc(dn, rhs, RDN.Equal)
 }
 
 // CommonAncestor returns a DN that has the common ancestor of dn and other.
@@ -230,7 +320,7 @@ func (dn DN) Equal(rhs DN) bool {
 func (dn DN) CommonAncestor(other DN) DN {
 	common := make(DN, 0, min(len(dn), len(other)))
 	for i := range cap(common) {
-		if dn[i] != other[i] {
+		if !dn[i].Equal(other[i]) {
 			break
 		}
 		common = append(common, dn[i])
@@ -244,8 +334,8 @@ func (dn DN) Tail(head DN) DN {
 	return dn[len(c):]
 }
 
-// IsRoot returns true if dn is the root DN. The root DN has no components.
-func (dn DN) IsRoot() bool {
+// IsEmpty returns true if dn is the root DN. The root DN has no components.
+func (dn DN) IsEmpty() bool {
 	return len(dn) == 0
 }
 
@@ -257,49 +347,67 @@ func (dn DN) IsRoot() bool {
 // minimum. The values need not be an array but may be. The values must be
 // strings, float64s or bools.
 func NewEntryFromMap(attrs map[string]any) (*Entry, error) {
-	// Validate that the entry contains at least an objectClass
-	// and a dn attribute.
-	if attrs["objectClass"] == nil || attrs["dn"] == nil {
-		return nil, fmt.Errorf("value missing mandatory attributes: %#v", attrs)
+	e := &Entry{
+		Attrs: make(map[string]Attr),
 	}
 
-	e := Entry{
-		Attrs: make(map[string][]string),
-	}
-
-	for attr, val := range attrs {
-		attrVal := e.Attrs[attr]
-		array, ok := val.([]any)
+	for attrName, val := range attrs {
+		attrVal, ok := val.([]any)
 		if !ok {
-			array = []any{val}
+			attrVal = []any{val}
 		}
 
-		if attr == "dn" {
-			if len(array) > 1 {
-				return nil, fmt.Errorf("dn cannot have multiple values: %v", array)
+		if strings.ToLower(attrName) == "dn" {
+			if len(attrVal) > 1 {
+				return nil, fmt.Errorf("dn cannot have multiple values: %v", attrVal)
 			}
-			dn, ok := array[0].(string)
-			if !ok {
-				return nil, fmt.Errorf("dn must be a string: %v", array[0])
+			dnstr, ok := attrVal[0].(string)
+			if !ok || strings.TrimSpace(dnstr) == "" {
+				return nil, fmt.Errorf("dn must be a non-empty string: %v", attrVal[0])
 			}
-			e.DN = NewDN(dn)
+			if !e.DN.IsEmpty() {
+				return nil, fmt.Errorf("dn already set: %v, %v", e.DN, dnstr)
+			}
+			dn, err := NewDN(dnstr)
+			if err != nil {
+				return nil, err
+			}
+			if dn.IsEmpty() {
+				return nil, errors.New("dn must not be empty")
+			}
+			e.DN = dn
 			continue
 		}
 
-		for _, aval := range array {
+		attr, ok := e.GetAttr(attrName)
+		if ok {
+			return nil, fmt.Errorf("duplicate attribute: %v, %v", attrName, attr.Name)
+		}
+		attr.Name = attrName
+
+		for _, aval := range attrVal {
 			switch v := aval.(type) {
 			case string:
-				attrVal = append(attrVal, v)
+				attr.Vals = append(attr.Vals, v)
 			case float64:
-				attrVal = append(attrVal, strconv.FormatFloat(v, 'f', -1, 64))
+				attr.Vals = append(attr.Vals, strconv.FormatFloat(v, 'f', -1, 64))
 			case bool:
-				attrVal = append(attrVal, strconv.FormatBool(v))
+				attr.Vals = append(attr.Vals, strconv.FormatBool(v))
 			default:
 				return nil, fmt.Errorf("invalid type for attribute: %v: %#T", aval, aval)
 			}
 		}
-		e.Attrs[attr] = attrVal
+		e.AddAttr(attr)
 	}
 
-	return &e, nil
+	// Validate that the entry contains at least an objectClass
+	// and a dn attribute.
+	if e.DN.IsEmpty() {
+		return nil, errors.New("missing DN")
+	}
+	if _, ok := e.GetAttr("objectClass"); !ok {
+		return nil, fmt.Errorf("missing objectClass for %s", e.DN)
+	}
+
+	return e, nil
 }
