@@ -24,8 +24,8 @@ func Test_ReadJSON_Success(t *testing.T) {
 		require.Len(t, entries, 2)
 		// The object-based input produces entries in random order (due to
 		// map iteration), so sort by DN first.
-		slices.SortFunc(entries, func(a, b *Entry) int { return slices.Compare(a.DN, b.DN) })
-		require.Equal(t, NewDN("o=example,dc=example,dc=com"), entries[0].DN)
+		slices.SortFunc(entries, func(a, b *Entry) int { return slices.CompareFunc(a.DN, b.DN, RDN.Compare) })
+		require.Equal(t, MustDN(t, "o=example,dc=example,dc=com"), entries[0].DN)
 	}
 
 	for _, filename := range tests {

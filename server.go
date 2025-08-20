@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"iter"
 	"log/slog"
+	"maps"
 
 	"github.com/jimlambrt/gldap"
 )
@@ -73,9 +74,14 @@ func (s *Server) handleSearch(w *gldap.ResponseWriter, r *gldap.Request) {
 	}
 	slog.Info("Search request", "baseDN", req.BaseDN, "scope", req.Scope, "filter", req.Filter)
 
-	baseDN := NewDN(req.BaseDN)
+	baseDN, err := NewDN(req.BaseDN)
+	if err != nil {
+		slog.Error("Search with invalid DN", "error", err.Error(), "dn", req.BaseDN)
+		resp.SetResultCode(gldap.ResultInvalidDNSyntax)
+		return
+	}
 	base := s.db.DIT.Find(baseDN)
-	if base == nil || (base.Entry.DN.IsRoot() && req.Scope != gldap.BaseObject) {
+	if base == nil || (base.Entry.DN.IsEmpty() && req.Scope != gldap.BaseObject) {
 		slog.Error("basedn not found", "method", "search", "basedn", baseDN.String())
 		resp.SetResultCode(gldap.ResultNoSuchObject)
 		return
@@ -103,7 +109,12 @@ func (s *Server) handleSearch(w *gldap.ResponseWriter, r *gldap.Request) {
 		// filter attribute values based on req.TypesOnly,
 		// filter entrires, attributes and values based on permissions.
 
-		re := r.NewSearchResponseEntry(e.DN.String(), gldap.WithAttributes(e.Attrs))
+		attrMap := map[string][]string{}
+		for a := range maps.Values(e.Attrs) {
+			attrMap[a.Name] = a.Vals
+		}
+
+		re := r.NewSearchResponseEntry(e.DN.String(), gldap.WithAttributes(attrMap))
 		if err := w.Write(re); err != nil {
 			slog.Error("Failed to write search response", "error", err.Error())
 			return
