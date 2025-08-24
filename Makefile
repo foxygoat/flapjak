@@ -3,11 +3,11 @@
 
 # --- Global -------------------------------------------------------------------
 O = out
-COVERAGE = 54
+COVERAGE = 63
 VERSION ?= $(shell git describe --tags --dirty --always)
 
 ## Build and lint
-all: build lint
+all: build lint test check-coverage
 	@if [ -e .git/rebase-merge ]; then git --no-pager log -1 --pretty='%h %s'; fi
 	@echo '$(COLOUR_GREEN)Success$(COLOUR_NORMAL)'
 
