@@ -44,6 +44,8 @@ func (s *Server) Run(listen string) error {
 }
 
 func (s *Server) handleBind(w *gldap.ResponseWriter, r *gldap.Request) {
+	// Set the default response to InvalidCredentials, so we only
+	// return success if explicitly overridden.
 	resp := r.NewBindResponse(gldap.WithResponseCode(gldap.ResultInvalidCredentials))
 	defer w.Write(resp) //nolint:errcheck // not much to do if it fails
 
@@ -53,14 +55,34 @@ func (s *Server) handleBind(w *gldap.ResponseWriter, r *gldap.Request) {
 		return
 	}
 
-	if m.UserName == "" && m.Password == "" {
+	switch {
+	case m.UserName == "" && m.Password == "":
 		slog.Info("anonymous bind")
-	} else if m.UserName != "" && m.Password != "" {
-		slog.Info("simple bind", "username", m.UserName, "password", m.Password)
-	} else {
-		slog.Error("invalid bind")
+	case m.UserName != "" && m.Password != "":
+		bindDN, err := NewDN(m.UserName)
+		if err != nil {
+			slog.Error("bind with invalid DN", "error", err.Error(), "username", m.UserName)
+			return
+		}
+		node := s.db.DIT.Find(bindDN)
+		if node == nil {
+			slog.Error("bind with unknown DN", "username", m.UserName)
+			return
+		}
+		err = node.Entry.Authenticate(string(m.Password))
+		if err != nil {
+			slog.Error("bind failed", "username", m.UserName, "error", err)
+			return
+		}
+		slog.Info("simple bind", "username", m.UserName)
+	case m.UserName == "":
+		slog.Error("invalid bind: missing username")
+		return
+	case m.Password == "":
+		slog.Error("invalid bind: missing password")
 		return
 	}
+	// Override InvalidCredentials set above.
 	resp.SetResultCode(gldap.ResultSuccess)
 }
 

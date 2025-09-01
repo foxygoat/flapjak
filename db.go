@@ -1,12 +1,27 @@
 package main
 
 import (
+	"bytes"
+	"cmp"
+	"crypto/sha1" //nolint:gosec // may be weak, but we use it
+	"crypto/sha256"
+	"crypto/sha512"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"hash"
 	"iter"
 	"slices"
 	"strconv"
 	"strings"
+)
+
+var (
+	ErrInvalidEntryForAuth  = errors.New("invalid entry for authentication")
+	ErrAuthenticationFailed = errors.New("authentication failed")
+	ErrMalformedBase64      = errors.New("hashtext base64 encoding malformed")
+	ErrHashtextTooShort     = errors.New("hashtext too short")
+	ErrMissingSalt          = errors.New("hashtext has missing salt")
 )
 
 // DB is an LDAP database, which is just a collection of entries and indicies
@@ -52,6 +67,94 @@ func (e *Entry) GetAttr(attr string) (Attr, bool) {
 	// TODO(camh): Support lookup by OID
 	v, ok := e.Attrs[strings.ToLower(attr)]
 	return v, ok
+}
+
+// Authenticate checks that the LDAP Entry is valid for authentication and that
+// the entry has a password that matches the given password. If so nil is
+// returned. Otherwise an error is returned.
+//
+// The form of hashed password in an entry is described by "[RFC 2307, 5.3]
+// Interpreting user and group entries" with the supported schemes being SSHA
+// (salted SHA-1), SSHA256 (salted SHA-256) and SSHA512 (salted SHA-512). This
+// is how [OpenLDAP passwords] are done, so this does it the same. e.g.
+// "{SSHA}<base64-encoded-hash+salt>".
+//
+// [RFC 2307, 5.3]: https://datatracker.ietf.org/doc/html/rfc2307#section-5.3
+// [OpenLDAP passwords]: https://www.openldap.org/faq/data/cache/347.html
+func (e *Entry) Authenticate(password string) error {
+	if !e.isValidForAuthentication() {
+		return ErrInvalidEntryForAuth
+	}
+
+	// hashSchemes is a list of supported password hashing schemes
+	// with their functions for creating a hash.Hash for that scheme.
+	hashSchemes := map[string]func() hash.Hash{
+		"{SSHA}":    sha1.New,
+		"{SSHA256}": sha256.New,
+		"{SSHA512}": sha512.New,
+	}
+
+	var firstErr error
+	hashedPasswords, _ := e.GetAttr("userPassword")
+	for _, hashedPassword := range hashedPasswords.Vals {
+		scheme, hashtext, ok := splitScheme(hashedPassword)
+		if !ok || hashSchemes[scheme] == nil {
+			continue
+		}
+		ok, err := pwCheckSaltedHash(password, hashtext, hashSchemes[scheme])
+		if ok {
+			return nil
+		}
+		firstErr = cmp.Or(firstErr, err)
+	}
+
+	return cmp.Or(firstErr, ErrAuthenticationFailed)
+}
+
+func (e *Entry) isValidForAuthentication() bool {
+	// authClasses is a list of objectClasses for entries that are
+	// valid for authentication. If an entry does not have one of
+	// these objectClasses, an attempt to authenticate with its DN
+	// will fail.
+	authClasses := []string{"posixAccount", "posixGroup", "shadowAccount"}
+
+	entryClasses, _ := e.GetAttr("objectClass")
+	for _, authClass := range authClasses {
+		if entryClasses.HasValue(authClass) {
+			return true
+		}
+	}
+	return false
+}
+
+func splitScheme(hashedPassword string) (string, string, bool) {
+	idx := strings.IndexRune(hashedPassword, '}')
+	if idx == -1 || (len(hashedPassword) > 0 && hashedPassword[0] != '{') {
+		return "", "", false
+	}
+	return hashedPassword[:idx+1], hashedPassword[idx+1:], true
+}
+
+func pwCheckSaltedHash(password string, hashtext string, newHash func() hash.Hash) (bool, error) {
+	h := newHash()
+	hps, err := base64.StdEncoding.DecodeString(hashtext)
+	if err != nil {
+		return false, ErrMalformedBase64
+	}
+	if len(hps) < h.Size() {
+		return false, ErrHashtextTooShort
+	}
+	if len(hps) == h.Size() {
+		return false, ErrMissingSalt
+	}
+
+	expected := hps[:h.Size()]
+	salt := hps[h.Size():]
+
+	h.Write([]byte(password))
+	h.Write(salt)
+
+	return bytes.Equal(h.Sum(nil), expected), nil
 }
 
 // HasValue returns true if val is one of the values of the attribute. The

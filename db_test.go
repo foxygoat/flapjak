@@ -1,6 +1,12 @@
 package main
 
 import (
+	"crypto/sha1" //nolint:gosec // may be weak, but we use it
+	"crypto/sha256"
+	"crypto/sha512"
+	"encoding/base64"
+	"hash"
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -146,4 +152,143 @@ func Test_Entry_CaseInsensitiveAttrs(t *testing.T) {
 	require.Len(t, a.Vals, 1)
 	require.Equal(t, "objectClass", a.Name)
 	require.Equal(t, emap["objectClass"], a.Vals[0])
+}
+
+func Test_Entry_Auth(t *testing.T) {
+	type testcase struct {
+		name         string
+		objectClass  string
+		scheme       string
+		userPassword string
+		expectErr    error
+	}
+
+	testfunc := func(t *testing.T, tt testcase) { //nolint:thelper // not a helper
+		password := "password"
+		entryMap := map[string]any{
+			"dn":          "uid=alice,dc=example,dc=com",
+			"objectClass": tt.objectClass,
+		}
+		var userPassword []any
+		if tt.userPassword != "" {
+			userPassword = append(userPassword, tt.userPassword)
+		}
+		if tt.scheme != "" {
+			hashedPassword := hashPassword(t, password, tt.scheme)
+			userPassword = append(userPassword, hashedPassword)
+		}
+		if userPassword != nil {
+			entryMap["userPassword"] = userPassword
+		}
+		e, err := NewEntryFromMap(entryMap)
+		require.NoError(t, err)
+		err = e.Authenticate(password)
+		if tt.expectErr != nil {
+			require.ErrorIs(t, err, tt.expectErr)
+		} else {
+			require.NoError(t, err)
+		}
+	}
+
+	testcases := []testcase{
+		{
+			name:        "Salted SHA-1",
+			objectClass: "posixAccount",
+			scheme:      "SSHA",
+		},
+		{
+			name:        "Salted SHA-256",
+			objectClass: "posixAccount",
+			scheme:      "SSHA256",
+		},
+		{
+			name:        "Salted SHA-512",
+			objectClass: "posixAccount",
+			scheme:      "SSHA512",
+		},
+		{
+			name:        "posixGroup entry",
+			objectClass: "posixGroup",
+			scheme:      "SSHA",
+		},
+		{
+			name:        "shadowAccount entry",
+			objectClass: "shadowAccount",
+			scheme:      "SSHA",
+		},
+		{
+			name:         "multiple schemes",
+			objectClass:  "posixAccount",
+			userPassword: "{UNKNOWN}R09BVCBpcyBteSBzaGVwaGFyZAo=",
+			scheme:       "SSHA",
+		},
+		{
+			name:        "invalid objectClass",
+			objectClass: "person",
+			expectErr:   ErrInvalidEntryForAuth,
+		},
+		{
+			name:         "unknown scheme in entry",
+			objectClass:  "posixAccount",
+			userPassword: "{UNKNOWN}R09BVCBpcyBteSBzaGVwaGFyZAo=",
+			expectErr:    ErrAuthenticationFailed,
+		},
+		{
+			name:         "missing scheme",
+			objectClass:  "posixAccount",
+			userPassword: "R09BVCBpcyBteSBzaGVwaGFyZAo=",
+			expectErr:    ErrAuthenticationFailed,
+		},
+		{
+			name:         "invalid scheme",
+			objectClass:  "posixAccount",
+			userPassword: "SSHA}R09BVCBpcyBteSBzaGVwaGFyZAo=",
+			expectErr:    ErrAuthenticationFailed,
+		},
+		{
+			name:         "malformed base64",
+			objectClass:  "posixAccount",
+			userPassword: "{SSHA}#$@!@#$",
+			expectErr:    ErrMalformedBase64,
+		},
+		{
+			name:        "short hash",
+			objectClass: "posixAccount",
+			// echo -n not-hashed | openssl base64
+			userPassword: "{SSHA}bm90LWhhc2hlZA==",
+			expectErr:    ErrHashtextTooShort,
+		},
+		{
+			name:        "missing salt",
+			objectClass: "posixAccount",
+			// echo -n password | openssl dgst -binary -sha1 | openssl base64
+			userPassword: "{SSHA}W6ph5Mm5Pz8GgiULbPgzG37mj9g=",
+			expectErr:    ErrMissingSalt,
+		},
+	}
+
+	for _, tt := range testcases {
+		t.Run(tt.name, func(t *testing.T) { testfunc(t, tt) })
+	}
+}
+
+func hashPassword(t *testing.T, password string, scheme string) string {
+	t.Helper()
+
+	newHash := map[string]func() hash.Hash{
+		"SSHA":    sha1.New,
+		"SSHA256": sha256.New,
+		"SSHA512": sha512.New,
+	}
+
+	require.Contains(t, newHash, scheme)
+
+	// Use a fixed salt in tests
+	salt := "0123456789ABCDEF"
+
+	h := newHash[scheme]()
+	io.WriteString(h, password) //nolint:errcheck,gosec // cannot error
+	io.WriteString(h, salt)     //nolint:errcheck,gosec // cannot error
+
+	return "{" + scheme + "}" + base64.StdEncoding.EncodeToString(append(h.Sum(nil), salt...))
 }
