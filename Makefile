@@ -94,10 +94,10 @@ tag-release: nexttag
 	git push origin $(RELEASE_TAG)
 
 build-release:
-	$(MAKE) build GOOS=linux GOARCH=amd64 O=$(RELEASE_DIR)
-	$(MAKE) build GOOS=linux GOARCH=arm64 O=$(RELEASE_DIR)
-	$(MAKE) build GOOS=darwin GOARCH=amd64 O=$(RELEASE_DIR)
-	$(MAKE) build GOOS=darwin GOARCH=arm64 O=$(RELEASE_DIR)
+	$(MAKE) build CGO_ENABLED=0 GOOS=linux GOARCH=amd64 O=$(RELEASE_DIR)
+	$(MAKE) build CGO_ENABLED=0 GOOS=linux GOARCH=arm64 O=$(RELEASE_DIR)
+	$(MAKE) build CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 O=$(RELEASE_DIR)
+	$(MAKE) build CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 O=$(RELEASE_DIR)
 
 publish-release:
 	gh release create $(RELEASE_TAG) --generate-notes $(RELEASE_DIR)/*
