@@ -104,7 +104,7 @@ func (s *Server) handleSearch(w *gldap.ResponseWriter, r *gldap.Request) {
 		return
 	}
 	base := s.db.DIT.Find(baseDN)
-	if base == nil || (base.Entry.DN.IsEmpty() && req.Scope != gldap.BaseObject) {
+	if base == nil || (baseDN.IsEmpty() && req.Scope != gldap.BaseObject) {
 		slog.Error("basedn not found", "method", "search", "basedn", baseDN.String())
 		resp.SetResultCode(gldap.ResultNoSuchObject)
 		return
