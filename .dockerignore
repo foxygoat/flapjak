@@ -1,0 +1,9 @@
+# Ignore everything.
+*
+
+# Only add what is copied. Keep in sync with what is copied in Dockerfile.
+!/go.mod
+!/go.sum
+!/*.go
+!/bin/
+!/Makefile

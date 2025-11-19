@@ -83,21 +83,70 @@ godoc: build
 
 .PHONY: godoc
 
+# --- OCI image ----------------------------------------------------------------
+
+# OCI builds can target different environments by defining the platform,
+# container registry and image tag for the environment and setting OCI_BUILD
+# to the environment name. The "release" environment is pre-defined for
+# releasing formal OCI images. The default null environment produces an image
+# for the local image store, local architecture with no image tag (which means
+# "latest" to Docker).
+# For example, you might set the following in a direnv .envrc file for developing
+# local container images:
+#   OCI_BUILD=local
+#   OCI_PLATFORM_local = linux/amd64
+#   OCI_REGISTRY_local = reg.example.com
+#   OCI_TAG_local = dev
+# This will locally build only amd64, push the image to reg.example.com and tag
+# it with a tag of "dev".
+
+OCI_PLATFORM_release = linux/amd64,linux/arm64
+OCI_REGISTRY_release = docker.io
+OCI_TAG_release = $(VERSION)
+
+OCI_PLATFORM = $(OCI_PLATFORM_$(OCI_BUILD))
+OCI_REGISTRY = $(OCI_REGISTRY_$(OCI_BUILD))
+OCI_TAG = $(OCI_TAG_$(OCI_BUILD))
+
+OCI_REPOSITORY = foxygoat/flapjak
+OCI_IMAGE = $(if $(OCI_REGISTRY),$(OCI_REGISTRY)/)$(OCI_REPOSITORY)$(if $(OCI_TAG),:$(OCI_TAG))
+
+## Build OCI container image
+build-oci:
+	docker buildx build \
+		--tag $(OCI_IMAGE) \
+		--build-arg VERSION=$(VERSION) \
+		$(if $(OCI_PLATFORM),--platform $(OCI_PLATFORM)) \
+		$(if $(PUSH),--push,--load) \
+		.
+
+## Log into container registry $OCI_REGISTRY with $DOCKER_USERNAME:$DOCKER_PASSWORD
+docker-login:
+	@if [ -z "${DOCKER_USERNAME}" ]; then echo 'DOCKER_USERNAME not set' >&2; exit 1; fi
+	@if ! printenv DOCKER_PASSWORD >/dev/null; then echo 'DOCKER_PASSWORD not set' >&2; exit 1; fi
+	printenv DOCKER_PASSWORD | \
+		docker login --password-stdin --username $(DOCKER_USERNAME) $(OCI_REGISTRY)
+
+.PHONY: build-oci docker-login
+
 # --- Release ------------------------------------------------------------------
 RELEASE_DIR = $(O)/release
 
 ## Tag and release binaries for different OS on GitHub release
-release: tag-release .WAIT build-release .WAIT publish-release
+release: tag-release .WAIT build-release build-release-oci .WAIT publish-release
 
 tag-release: nexttag
 	git tag $(RELEASE_TAG)
 	git push origin $(RELEASE_TAG)
 
 build-release:
-	$(MAKE) build GOOS=linux GOARCH=amd64 O=$(RELEASE_DIR)
-	$(MAKE) build GOOS=linux GOARCH=arm64 O=$(RELEASE_DIR)
-	$(MAKE) build GOOS=darwin GOARCH=amd64 O=$(RELEASE_DIR)
-	$(MAKE) build GOOS=darwin GOARCH=arm64 O=$(RELEASE_DIR)
+	$(MAKE) build CGO_ENABLED=0 GOOS=linux GOARCH=amd64 O=$(RELEASE_DIR)
+	$(MAKE) build CGO_ENABLED=0 GOOS=linux GOARCH=arm64 O=$(RELEASE_DIR)
+	$(MAKE) build CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 O=$(RELEASE_DIR)
+	$(MAKE) build CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 O=$(RELEASE_DIR)
+
+build-release-oci:
+	$(MAKE) build-oci OCI_BUILD=release PUSH=1
 
 publish-release:
 	gh release create $(RELEASE_TAG) --generate-notes $(RELEASE_DIR)/*
@@ -105,7 +154,7 @@ publish-release:
 nexttag:
 	$(if $(RELEASE_TAG),,$(eval RELEASE_TAG := $(shell $(NEXTTAG_CMD))))
 
-.PHONY: build-release nexttag publish-release release tag-release
+.PHONY: build-release build-release-oci nexttag publish-release release tag-release
 
 define NEXTTAG_CMD
 { git tag --list --merged HEAD --sort=-v:refname; echo v0.0.0; }
