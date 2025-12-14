@@ -39,6 +39,7 @@ linters:
     - tagalign
     - tenv
     - testpackage
+    - thelper
     - varnamelen
     - wastedassign
     - wrapcheck
