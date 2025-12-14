@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/stretchr/testify/require"
+	"github.com/matryer/is"
 )
 
 func Test_ReadJSON_Success(t *testing.T) {
@@ -15,17 +15,18 @@ func Test_ReadJSON_Success(t *testing.T) {
 	}
 
 	testfn := func(t *testing.T, filename string) {
-		t.Helper()
+		is := is.New(t)
+		is.Helper()
 		f, err := os.Open(filename)
-		require.NoError(t, err)
+		is.NoErr(err)
 
 		entries, err := ReadJSON(f)
-		require.NoError(t, err)
-		require.Len(t, entries, 2)
+		is.NoErr(err)
+		is.Equal(2, len(entries))
 		// The object-based input produces entries in random order (due to
 		// map iteration), so sort by DN first.
 		slices.SortFunc(entries, func(a, b *Entry) int { return slices.CompareFunc(a.DN, b.DN, RDN.Compare) })
-		require.Equal(t, MustDN(t, "o=example,dc=example,dc=com"), entries[0].DN)
+		is.Equal(MustDN(t, "o=example,dc=example,dc=com"), entries[0].DN)
 	}
 
 	for _, filename := range tests {
@@ -45,12 +46,13 @@ func Test_ReadJSON_Failure(t *testing.T) {
 	}
 
 	testfn := func(t *testing.T, filename string) {
-		t.Helper()
+		is := is.New(t)
+		is.Helper()
 		f, err := os.Open(filename)
-		require.NoError(t, err)
+		is.NoErr(err)
 
 		_, err = ReadJSON(f)
-		require.Error(t, err)
+		is.True(err != nil)
 	}
 
 	for _, filename := range tests {
