@@ -408,8 +408,8 @@ func (dn DN) String() string {
 	return strings.Join(elems, ",")
 }
 
-// IsAncestor returns whether sub is an ancestor of dn. A sub is an ancestor
-// of dn if dn matches the leading elements of sub. A DN is an ancestor of itself.
+// IsAncestor returns whether dn is an ancestor of sub. A dn is an ancestor
+// of sub if dn matches the leading elements of sub. A DN is an ancestor of itself.
 func (dn DN) IsAncestor(sub DN) bool {
 	if len(dn) > len(sub) {
 		return false
