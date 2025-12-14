@@ -29,6 +29,11 @@
 //	                               Set top-level arg code from a file (filename from
 //	                               env if omitted)
 //	      --listen=":10389"        Listen address
+//	      --server-key=STRING      TLS key for server
+//	      --server-cert=STRING     TLS certificate (chain) for server
+//	      --client-ca=CLIENT-CA    Client CA cert for client verification
+//	      --enforce-client-ca      Require that the client provide a valid
+//	                               certificate
 //	      --version                Print program version
 package main
 
@@ -51,6 +56,7 @@ type CLI struct {
 	Entries string           `required:"" help:"Name of jsonnet file containing LDAP entries"`
 	Jnx     jnxkong.Config   `embed:""`
 	Listen  string           `default:":10389" help:"Listen address"`
+	TLS     tlsConfig        `embed:""`
 	Version kong.VersionFlag `help:"Print program version"`
 }
 
@@ -85,9 +91,9 @@ func (cli *CLI) Run() error {
 
 	slog.Info("Entries loaded", "count", len(entries))
 
-	s, err := NewServer(db)
-	if err != nil {
-		return err
-	}
+	var opts []Option
+	if cli.TLS.ListenTLS {
+		opts = append(opts, WithTLSListener(cli.TLS.AsTLSConfig())
+	s := NewServer(db, WithTLSConfig(cli.TLS.AsTLSConfig()))
 	return s.Run(cli.Listen)
 }

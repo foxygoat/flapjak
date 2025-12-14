@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"crypto/tls"
 	"iter"
 	"log/slog"
 	"maps"
@@ -10,37 +10,63 @@ import (
 	"github.com/jimlambrt/gldap"
 )
 
+// Server is a flapjak server that serves LDAP requests using a database. It
+// can serve the LDAP bind and search operations only, operating as a read-only
+// LDAP server,
 type Server struct {
-	ldap *gldap.Server
-	db   *DB
+	ldap      *gldap.Server
+	db        *DB
+	tlsConfig *tls.Config
 }
 
-func NewServer(db *DB) (*Server, error) {
-	ls, err := gldap.NewServer()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create server: %w", err)
-	}
+// Option is a functional option that may be passed to NewServer to configure
+// optional features of the server.
+type Option func(*Server)
 
-	m, err := gldap.NewMux()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create mux: %w", err)
-	}
-
+// NewServer returns a Server ready to serve db.
+func NewServer(db *DB, options ...Option) *Server {
+	ls, _ := gldap.NewServer() //nolint:errcheck,gosec // cannot error
 	s := &Server{
 		ldap: ls,
 		db:   db,
 	}
 
+	for _, fnopt := range options {
+		fnopt(s)
+	}
+
+	m, _ := gldap.NewMux()   //nolint:errcheck,gosec // cannot error
 	m.Bind(s.handleBind)     //nolint:errcheck,gosec // cannot error
 	m.Search(s.handleSearch) //nolint:errcheck,gosec // cannot error
-	ls.Router(m)             //nolint:errcheck,gosec // cannot error
+	if s.tlsConfig != nil {
+		m.ExtendedOperation(s.handleStartTLS, gldap.ExtendedOperationStartTLS)
+	}
 
-	return s, nil
+	ls.Router(m) //nolint:errcheck,gosec // cannot error
+
+	return s
 }
 
+// WithTLSConfig is a functional option to configure TLS parameters for the
+// server connection. It is safe to pass a nil pointer as the config, which
+// will disable TLS. The TLS config may configure client and server TLS.
+func WithTLSConfig(c *tls.Config) Option {
+	return func(s *Server) {
+		s.tlsConfig = c
+	}
+}
+
+// Run starts the server listening on the given listen address
 func (s *Server) Run(listen string) error {
-	slog.Info("Server listening", "address", listen)
-	return s.ldap.Run(listen)
+	slog.Info("Server listening", "address", listen, "tls", s.tlsConfig != nil)
+	return s.ldap.Run(listen, gldap.WithTLSConfig(s.tlsConfig))
+}
+
+func (s *Server) handleStartTLS(w *gldap.ResponseWriter, r *gldap.Request) {
+	slog.Info("handleStartTLS", "tls", s.tlsConfig != nil)
+	if s.tlsConfig != nil {
+		r.StartTLS(s.tlsConfig)
+	}
 }
 
 func (s *Server) handleBind(w *gldap.ResponseWriter, r *gldap.Request) {
