@@ -1,9 +1,10 @@
 package main
 
 import (
+	"errors"
 	"testing"
 
-	"github.com/stretchr/testify/require"
+	"github.com/matryer/is"
 )
 
 func Test_FilterParse(t *testing.T) {
@@ -14,9 +15,10 @@ func Test_FilterParse(t *testing.T) {
 	}
 
 	testfunc := func(t *testing.T, tt testcase) { //nolint:thelper // not a helper
+		is := is.New(t)
 		n, err := Parse(tt.filter)
-		require.NoError(t, err)
-		require.Equal(t, tt.expectedNode, n)
+		is.NoErr(err)
+		is.Equal(tt.expectedNode, n)
 	}
 
 	// fixtures
@@ -84,8 +86,9 @@ func Test_FilterParse_Fail(t *testing.T) {
 	}
 
 	testfunc := func(t *testing.T, tt testcase) { //nolint:thelper // not a helper
+		is := is.New(t)
 		_, err := Parse(tt.filter)
-		require.ErrorIs(t, err, tt.err)
+		is.True(errors.Is(err, tt.err))
 	}
 
 	tests := []testcase{
@@ -154,8 +157,9 @@ func Test_FilterParse_Unimplemented(t *testing.T) {
 	}
 
 	testfunc := func(t *testing.T, tt testcase) { //nolint:thelper // not a helper
+		is := is.New(t)
 		_, err := Parse(tt.filter)
-		require.ErrorIs(t, err, tt.err)
+		is.True(errors.Is(err, tt.err))
 	}
 
 	tests := []testcase{
@@ -189,18 +193,19 @@ func Test_FilterMatch(t *testing.T) {
 	}
 
 	testfunc := func(t *testing.T, tt testcase) { //nolint:thelper // not a helper
+		is := is.New(t)
 		attrs := map[string]any{
 			"dn":          "dc=example,dc=com",
 			"objectClass": "top",
 			"uid":         "1234",
 		}
 		e, err := NewEntryFromMap(attrs)
-		require.NoError(t, err)
+		is.NoErr(err)
 
 		n, err := Parse(tt.filter)
-		require.NoError(t, err)
+		is.NoErr(err)
 		got := n.Match(e)
-		require.Equal(t, tt.want, got)
+		is.Equal(tt.want, got)
 	}
 
 	tests := []testcase{
