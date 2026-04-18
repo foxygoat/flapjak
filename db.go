@@ -158,11 +158,17 @@ func pwCheckSaltedHash(password string, hashtext string, newHash func() hash.Has
 }
 
 // HasValue returns true if val is one of the values of the attribute. The
-// value is compared case-sensitively, regardless of what an LDAP schema
+// value is compared case-insensitively, regardless of what an LDAP schema
 // may say for that attribute.
 func (a Attr) HasValue(val string) bool {
-	// TODO(camh): Handle case-insensitive values
-	return slices.Contains(a.Vals, val)
+	// TODO(camh): Handle case-sensitive values
+	lv := strings.ToLower(val)
+	for _, v := range a.Vals {
+		if strings.ToLower(v) == lv {
+			return true
+		}
+	}
+	return false
 }
 
 // IsSensitive returns true if the attribute is a sensitive one, such as a

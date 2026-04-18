@@ -8,6 +8,7 @@ import (
 	"errors"
 	"hash"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/matryer/is"
@@ -149,6 +150,7 @@ func Test_Entry_CaseInsensitiveAttrs(t *testing.T) {
 	is.Equal(1, len(a.Vals))
 	is.Equal("sn", a.Name)
 	is.Equal(emap["sn"], a.Vals[0])
+	is.True(a.HasValue(strings.ToUpper(a.Vals[0])))
 
 	a, ok = e.GetAttr("SN")
 	is.True(ok)
