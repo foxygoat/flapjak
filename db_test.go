@@ -43,6 +43,74 @@ func Test_RDN(t *testing.T) {
 	is.Equal(1, rdn4.Compare(rdn1))
 }
 
+func Test_ParseRDN(t *testing.T) {
+	type testcase struct {
+		name      string
+		rdn       string
+		expect    RDN
+		expectErr bool
+	}
+
+	testfunc := func(t *testing.T, tt testcase) { //nolint:thelper // not a helper
+		is := is.New(t)
+		rdn, err := ParseRDN(tt.rdn)
+		if tt.expectErr {
+			is.True(err != nil)
+			return
+		}
+		is.NoErr(err)
+		is.Equal(tt.expect, rdn)
+	}
+
+	testcases := []testcase{
+		{
+			name:   "name and value",
+			rdn:    "dc=example",
+			expect: RDN{Name: "dc", Value: "example"},
+		},
+		{
+			name:   "surrounding whitespace",
+			rdn:    " dc = example ",
+			expect: RDN{Name: "dc", Value: "example"},
+		},
+		{
+			name:   "omitted value",
+			rdn:    "dc=",
+			expect: RDN{Name: "dc"},
+		},
+		{
+			// Only the first separator is significant.
+			name:   "separator in value",
+			rdn:    "dc=a=b",
+			expect: RDN{Name: "dc", Value: "a=b"},
+		},
+		{
+			name:      "no separator",
+			rdn:       "example",
+			expectErr: true,
+		},
+		{
+			name:      "empty",
+			rdn:       "",
+			expectErr: true,
+		},
+		{
+			name:      "no name",
+			rdn:       "=example",
+			expectErr: true,
+		},
+		{
+			name:      "whitespace name",
+			rdn:       "  =example",
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range testcases {
+		t.Run(tt.name, func(t *testing.T) { testfunc(t, tt) })
+	}
+}
+
 func Test_DN(t *testing.T) {
 	is := is.New(t)
 	dn1, err := NewDN("dc=example, dc = com")
