@@ -4,6 +4,7 @@ linters:
   disable:
     - cyclop
     - depguard
+    - embeddedstructfieldcheck
     - exhaustive
     - exhaustruct_v5
     - forbidigo
