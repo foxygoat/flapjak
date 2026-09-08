@@ -1,9 +1,12 @@
 # Ignore everything.
 *
 
-# Only add what is copied. Keep in sync with what is copied in Dockerfile.
+# Only add what is copied.
 !/go.mod
 !/go.sum
 !/*.go
 !/bin/
 !/Makefile
+
+# Do not need to copy in test code.
+*_test.go

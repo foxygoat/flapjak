@@ -119,12 +119,7 @@ func (e *Entry) isValidForAuthentication() bool {
 	authClasses := []string{"posixAccount", "posixGroup", "shadowAccount"}
 
 	entryClasses, _ := e.GetAttr("objectClass")
-	for _, authClass := range authClasses {
-		if entryClasses.HasValue(authClass) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(authClasses, entryClasses.HasValue)
 }
 
 func splitScheme(hashedPassword string) (string, string, bool) {
@@ -393,8 +388,8 @@ func NewDN(dnstr string) (DN, error) {
 
 	elems := strings.Split(dnstr, ",")
 	result := make(DN, 0, len(elems))
-	for i := len(elems) - 1; i >= 0; i-- {
-		rdn, err := ParseRDN(elems[i])
+	for _, elem := range slices.Backward(elems) {
+		rdn, err := ParseRDN(elem)
 		if err != nil {
 			return nil, err
 		}
@@ -408,8 +403,8 @@ func NewDN(dnstr string) (DN, error) {
 func (dn DN) String() string {
 	// TODO(camh): escape chars (RFC 4514)
 	elems := make([]string, 0, len(dn))
-	for i := len(dn) - 1; i >= 0; i-- {
-		elems = append(elems, dn[i].String())
+	for _, d := range slices.Backward(dn) {
+		elems = append(elems, d.String())
 	}
 	return strings.Join(elems, ",")
 }

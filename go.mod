@@ -1,6 +1,6 @@
 module foxygo.at/flapjak
 
-go 1.24.1
+go 1.27.1
 
 require (
 	foxygo.at/jsonnext v0.1.16

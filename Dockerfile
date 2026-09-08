@@ -14,7 +14,8 @@ RUN ./bin/make --version
 COPY go.mod go.sum .
 RUN ./bin/go mod download
 
-COPY Makefile *.go .
+# Copy all except what's in .dockerignore
+COPY . .
 RUN ./bin/make build CGO_ENABLED=0 GOARCH=${TARGETARCH} VERSION=${VERSION}
 
 FROM scratch

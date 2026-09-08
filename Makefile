@@ -14,10 +14,10 @@ all: build lint test check-coverage
 ## Full clean build and up-to-date checks as run on CI
 ci: clean check-uptodate all
 
-# GENERATED_FILES is apended at targets that generate or modify files that are
+# GENERATED_FILES is appended at targets that generate or modify files that are
 # required to be up-to-date.
 GENERATED_FILES :=
-check-uptodate: tidy godoc
+check-uptodate: tidy gofix-diff godoc
 	test -z "$$(git status --porcelain -- $(GENERATED_FILES))" || { git status; false; }
 
 ## Remove generated files
@@ -39,12 +39,15 @@ GO_BIN_NAME = $(BIN_NAME)$(GO_BIN_SUFFIX)
 build: | $(O)
 	go build -o $(O)/$(GO_BIN_NAME) $(GO_FLAGS) .
 
+gofix-diff:
+	go fix -diff ./...
+
 GENERATED_FILES += go.mod go.sum
 ## Tidy go modules with "go mod tidy"
 tidy:
 	go mod tidy
 
-.PHONY: build tidy
+.PHONY: build gofix-diff tidy
 
 # --- Test ---------------------------------------------------------------------
 COVERFILE = $(O)/coverage.txt
@@ -157,10 +160,13 @@ nexttag:
 .PHONY: build-release build-release-oci nexttag publish-release release tag-release
 
 define NEXTTAG_CMD
-{ git tag --list --merged HEAD --sort=-v:refname; echo v0.0.0; }
-| grep -E "^v?[0-9]+.[0-9]+.[0-9]+$$"
-| head -n1
-| awk -F . '{ print $$1 "." $$2 "." $$3 + 1 }'
+{
+  { git tag --list --merged HEAD --sort=-v:refname; echo v0.0.0; }
+  | grep -E "^v?[0-9]+\.[0-9]+\.[0-9]+$$"
+  | head -n 1
+  | awk -F . '{ print $$1 "." $$2 "." $$3 + 1 }';
+  git diff --name-only @^ @ | sed -E -n 's|^doc/release-notes/(v[0-9]+\.[0-9]+\.[0-9]+)\.md$$|\1|p';
+} | sort --reverse --version-sort | head -n 1
 endef
 
 # --- Utilities ----------------------------------------------------------------

@@ -202,6 +202,7 @@ func Test_Entry_Auth(t *testing.T) {
 		}
 	}
 
+	//nolint:gosec // not real credentials
 	testcases := []testcase{
 		{
 			name:        "Salted SHA-1",
