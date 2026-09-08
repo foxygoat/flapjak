@@ -1,26 +1,15 @@
-issues:
-  exclude-use-default: false
-  exclude:
-    - "^don't use ALL_CAPS"
-    - "^ST1003: should not use ALL_CAPS"
-    - "^G304: Potential file inclusion via variable"
-  exclude-rules:
-    # Dynamic errors are OK in main (top-level dir). Packages should use sentinels.
-    - path: "^[^/]*$"
-      linters:
-        - err113
-
+version: "2"
 linters:
-  enable-all: true
+  default: all
   disable:
     - cyclop
     - depguard
     - exhaustive
-    - exhaustruct
+    - exhaustruct_v5
     - forbidigo
     - forcetypeassert
+    - funcorder
     - funlen
-    - gci
     - gochecknoglobals
     - gocognit
     - goconst
@@ -31,23 +20,54 @@ linters:
     - mnd
     - nestif
     - nlreturn
+    - noinlineerr
     - nonamedreturns
     - paralleltest
+    - perfsprint
     - revive
     - rowserrcheck
     - sqlclosecheck
     - tagalign
-    - tenv
     - testpackage
     - thelper
     - varnamelen
     - wastedassign
     - wrapcheck
+    - wsl_v5
+    # Deprecated but not yet removed. Retained here to silence deprecation warning
+    - exhaustruct
+    - gomodguard
     - wsl
-
-linters-settings:
-  gocritic:
-    disabled-checks:
-      - appendAssign # Perfectly valid to assign to a different var
-      - ifElseChain # This is taste and cannot be determined automatically
-      - dupArg # False positive with self-equality tests, not useful either
+  settings:
+    gocritic:
+      disabled-checks:
+        - appendAssign
+        - ifElseChain
+        - dupArg
+  exclusions:
+    generated: lax
+    rules:
+      - linters:
+          - err113
+        path: ^[^/]*$
+      - path: (.+)\.go$
+        text: ^don't use ALL_CAPS
+      - path: (.+)\.go$
+        text: '^ST1003: should not use ALL_CAPS'
+      - path: (.+)\.go$
+        text: '^G304: Potential file inclusion via variable'
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+    - gofumpt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
