@@ -218,7 +218,7 @@ func Test_Entry_CaseInsensitiveAttrs(t *testing.T) {
 	is.Equal(1, len(a.Vals))
 	is.Equal("sn", a.Name)
 	is.Equal(emap["sn"], a.Vals[0])
-	is.True(a.HasValue(strings.ToUpper(a.Vals[0])))
+	is.True(a.HasValue(strings.ToUpper(ValueString(a.Vals[0]))))
 
 	a, ok = e.GetAttr("SN")
 	is.True(ok)
@@ -373,4 +373,149 @@ func hashPassword(t *testing.T, password string, scheme string) string {
 	io.WriteString(h, salt)     //nolint:errcheck,gosec // cannot error
 
 	return "{" + scheme + "}" + base64.StdEncoding.EncodeToString(append(h.Sum(nil), salt...))
+}
+
+func Test_MatchSubstrings(t *testing.T) {
+	type testcase struct {
+		name    string
+		val     string
+		initial string
+		middles []string
+		final   string
+		expect  bool
+	}
+
+	testfunc := func(t *testing.T, tt testcase) { //nolint:thelper // not a helper
+		is := is.New(t)
+		a := Attr{Name: "cn", Vals: []any{tt.val}, Kind: KindString}
+		is.Equal(tt.expect, a.MatchSubstrings(tt.initial, tt.middles, tt.final))
+	}
+
+	testcases := []testcase{
+		{
+			name:    "initial only",
+			val:     "Jane Doe",
+			initial: "jan",
+			expect:  true,
+		},
+		{
+			name:   "final only",
+			val:    "Jane Doe",
+			final:  "DOE",
+			expect: true,
+		},
+		{
+			name:    "components matched in order",
+			val:     "Jane Q Doe",
+			middles: []string{"jane", "doe"},
+			expect:  true,
+		},
+		{
+			name:    "components out of order",
+			val:     "Jane Q Doe",
+			middles: []string{"doe", "jane"},
+			expect:  false,
+		},
+		{
+			name:    "initial and final overlap",
+			val:     "abc",
+			initial: "abc",
+			final:   "abc",
+			expect:  false,
+		},
+		{
+			// Lowering is not length preserving: the KELVIN SIGN is
+			// three bytes and lowers to a one byte "k". Advancing by
+			// the unlowered length would slice past the end.
+			name:    "initial lowers to fewer bytes",
+			val:     "k",
+			initial: "\u212A",
+			expect:  true,
+		},
+		{
+			name:    "any lowers to fewer bytes",
+			val:     "a k b",
+			middles: []string{"\u212A"},
+			expect:  true,
+		},
+		{
+			name:    "initial lowers to fewer bytes with final",
+			val:     "kb",
+			initial: "\u212A",
+			final:   "B",
+			expect:  true,
+		},
+		{
+			// U+023A lowers to U+2C65: two bytes becoming three.
+			name:    "initial lowers to more bytes",
+			val:     "\u2C65x",
+			initial: "\u023A",
+			expect:  true,
+		},
+		{
+			name:    "any lowers to more bytes",
+			val:     "a\u2C65b",
+			middles: []string{"\u023A"},
+			expect:  true,
+		},
+		{
+			// An attribute value is arbitrary octets and so is a
+			// filter, so bytes that are not valid UTF-8 have to
+			// compare as themselves. Lowercasing would turn each of
+			// these into the replacement character and match them.
+			name:    "distinct invalid bytes",
+			val:     "\xffa",
+			initial: "\xfe",
+			expect:  false,
+		},
+		{
+			name:    "same invalid byte",
+			val:     "\xffa",
+			initial: "\xff",
+			expect:  true,
+		},
+		{
+			name:    "replacement character is not an invalid byte",
+			val:     "\xffa",
+			initial: "\ufffd",
+			expect:  false,
+		},
+		{
+			name:    "invalid byte is not the replacement character",
+			val:     "\ufffda",
+			initial: "\xff",
+			expect:  false,
+		},
+		{
+			name:    "invalid byte in the middle",
+			val:     "a\xffb",
+			middles: []string{"\xff"},
+			expect:  true,
+		},
+		{
+			// The trailing byte of the value's rune is the byte the
+			// filter asks for, but a match may not begin inside a
+			// rune.
+			name:    "no match inside a rune",
+			val:     "\u00e9",
+			initial: "\xa9",
+			expect:  false,
+		},
+		{
+			name:   "final may not end inside a rune",
+			val:    "\u00e9",
+			final:  "\xa9",
+			expect: false,
+		},
+		{
+			name:    "any may not fall inside a rune",
+			val:     "a\u00e9b",
+			middles: []string{"\xa9"},
+			expect:  false,
+		},
+	}
+
+	for _, tt := range testcases {
+		t.Run(tt.name, func(t *testing.T) { testfunc(t, tt) })
+	}
 }

@@ -33,9 +33,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	jnxkong "foxygo.at/jsonnext/kong"
 	"github.com/alecthomas/kong"
@@ -67,6 +71,18 @@ func main() {
 }
 
 func (cli *CLI) Run() error {
+	// Shut down cleanly on SIGINT and SIGTERM so that in-flight
+	// operations get a chance to finish.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	// Hand the signal back once the first one arrives, so a second Ctrl-C
+	// kills the process rather than being swallowed by the grace period.
+	go func() {
+		<-ctx.Done()
+		stop()
+	}()
+
 	vm := cli.Jnx.MakeVM("FLAPJAK_PATH")
 	jsonEntries, err := vm.EvaluateFile(cli.Entries)
 	if err != nil {
@@ -85,9 +101,5 @@ func (cli *CLI) Run() error {
 
 	slog.Info("Entries loaded", "count", len(entries))
 
-	s, err := NewServer(db)
-	if err != nil {
-		return err
-	}
-	return s.Run(cli.Listen)
+	return NewServer(db).Run(ctx, cli.Listen)
 }
