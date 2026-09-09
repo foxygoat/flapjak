@@ -38,6 +38,7 @@ func Test_ReadJSON_Failure(t *testing.T) {
 		"testdata/top-level-non-aggregate.json",
 		"testdata/non-aggregate.json",
 		"testdata/no-dn.json",
+		"testdata/invalid-dn.json",
 		"testdata/no-object-class.json",
 		"testdata/multiple-dn.json",
 		"testdata/empty.json",

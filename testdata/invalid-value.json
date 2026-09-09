@@ -1,6 +1,6 @@
 [
   {
-    "dn": "example",
+    "dn": "dc=example",
     "objectClass": "top",
     "value": {
       "invalid": "nested not allowed"
