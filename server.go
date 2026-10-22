@@ -17,41 +17,39 @@ import (
 // out.
 var shutdownGrace = 5 * time.Second
 
-// Connection timeouts. Without them a client that connects and goes quiet, or
-// that stops reading part way through a response, holds a goroutine and a file
-// descriptor for the life of the process.
-//
-// Clients that keep a connection between lookups, nslcd among them, re-dial
-// when the server closes an idle one, so idleTimeout costs them a reconnect
-// rather than a failed lookup.
-const (
-	idleTimeout  = 5 * time.Minute
-	writeTimeout = 30 * time.Second
-)
-
 // Server serves a DB over LDAP.
 type Server struct {
-	ldap *ldap.Server
+	config ServerConfig
+	ldap   *ldap.Server
+}
+
+type ServerConfig struct {
+	Listen       string        `default:":10389" help:"Listen address"`
+	IdleTimeout  time.Duration `default:"15m" help:"Idle timeout (0 to disable)"`
+	WriteTimeout time.Duration `default:"30s" help:"Write timeout (0 to disable)"`
 }
 
 // NewServer returns a Server serving db.
-func NewServer(db *DB) *Server {
-	return &Server{ldap: &ldap.Server{
-		Handler:      &Handler{db: db},
-		IdleTimeout:  idleTimeout,
-		WriteTimeout: writeTimeout,
-	}}
+func NewServer(db *DB, config ServerConfig) *Server {
+	return &Server{
+		config: config,
+		ldap: &ldap.Server{
+			Handler:      &Handler{db: db},
+			IdleTimeout:  config.IdleTimeout,
+			WriteTimeout: config.WriteTimeout,
+		},
+	}
 }
 
-// Run serves LDAP on listen until ctx is cancelled, or until the listener
-// fails on its own. On cancellation, open connections are given shutdownGrace
-// to finish what they are doing before they are dropped.
-func (s *Server) Run(ctx context.Context, listen string) error {
+// Run serves LDAP on s.config.Listen until ctx is cancelled, or until the
+// listener fails on its own. On cancellation, open connections are given
+// shutdownGrace to finish what they are doing before they are dropped.
+func (s *Server) Run(ctx context.Context) error {
 	// The listener takes no context: a server is stopped by Shutdown or
 	// Close, which distinguish a graceful stop from an immediate one where
 	// a cancelled context could not.
 	served := make(chan error, 1)
-	go func() { served <- s.ldap.ListenAndServe(listen) }() //nolint:contextcheck // see above
+	go func() { served <- s.ldap.ListenAndServe(s.config.Listen) }() //nolint:contextcheck // see above
 
 	select {
 	case <-ctx.Done():

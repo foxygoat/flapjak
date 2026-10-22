@@ -29,6 +29,8 @@
 //	                               Set top-level arg code from a file (filename from
 //	                               env if omitted)
 //	      --listen=":10389"        Listen address
+//	      --idle-timeout=15m       Idle timeout (0 to disable)
+//	      --write-timeout=30s      Write timeout (0 to disable)
 //	      --version                Print program version
 package main
 
@@ -54,7 +56,7 @@ flapjak is a simple server of static LDAP records.
 type CLI struct {
 	Entries string           `required:"" help:"Name of jsonnet file containing LDAP entries"`
 	Jnx     jnxkong.Config   `embed:""`
-	Listen  string           `default:":10389" help:"Listen address"`
+	Server  ServerConfig     `embed:""`
 	Version kong.VersionFlag `help:"Print program version"`
 }
 
@@ -101,5 +103,5 @@ func (cli *CLI) Run() error {
 
 	slog.Info("Entries loaded", "count", len(entries))
 
-	return NewServer(db).Run(ctx, cli.Listen)
+	return NewServer(db, cli.Server).Run(ctx)
 }
