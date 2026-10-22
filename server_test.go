@@ -47,8 +47,9 @@ func startFlapjak(t *testing.T, entriesJSON string) *goldap.Conn {
 	is.NoErr(db.AddEntries(entries))
 
 	// Driven through the embedded server so the test can supply its own
-	// listener and discover the port; Run takes an address instead.
-	srv := NewServer(db).ldap
+	// listener and discover the port; Run listens on the configured address.
+	cfg := ServerConfig{IdleTimeout: 15 * time.Minute, WriteTimeout: 30 * time.Second}
+	srv := NewServer(db, cfg).ldap
 	srv.Logger = slog.New(slog.DiscardHandler)
 
 	var lc net.ListenConfig
@@ -298,9 +299,13 @@ func TestMixedAttributeKinds(t *testing.T) {
 func TestServerTimeouts(t *testing.T) {
 	is := is.New(t)
 
-	s := NewServer(NewDB())
-	is.True(s.ldap.IdleTimeout > 0)
-	is.True(s.ldap.WriteTimeout > 0)
+	cfg := ServerConfig{
+		IdleTimeout:  5 * time.Minute,
+		WriteTimeout: 45 * time.Second,
+	}
+	s := NewServer(NewDB(), cfg)
+	is.Equal(s.ldap.IdleTimeout, cfg.IdleTimeout)
+	is.Equal(s.ldap.WriteTimeout, cfg.WriteTimeout)
 }
 
 // TestSearchSizeLimit checks that a search returns no more entries than the
@@ -394,7 +399,7 @@ func TestRunReportsIncompleteShutdown(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	runErr := make(chan error, 1)
-	go func() { runErr <- NewServer(db).Run(ctx, addr) }()
+	go func() { runErr <- NewServer(db, ServerConfig{Listen: addr}).Run(ctx) }()
 
 	var nc net.Conn
 	var d net.Dialer
