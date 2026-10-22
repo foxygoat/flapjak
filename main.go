@@ -6,32 +6,36 @@
 //	flapjak is a simple server of static LDAP records.
 //
 //	Flags:
-//	  -h, --help                   Show context-sensitive help.
-//	      --entries=STRING         Name of jsonnet file containing LDAP entries
-//	  -J, --jpath=dir              Add a library search dir
-//	      --max-stack=500          Number of allowed stack frames of jsonnet VM
-//	      --max-trace=20           Maximum number of stack frames output on error
-//	  -V, --ext-str=var[=str]      Set extVar string (str from env if omitted)
+//	  -h, --help                    Show context-sensitive help.
+//	      --entries=STRING          Name of jsonnet file containing LDAP entries
+//	  -J, --jpath=dir               Add a library search dir
+//	      --max-stack=500           Number of allowed stack frames of jsonnet VM
+//	      --max-trace=20            Maximum number of stack frames output on error
+//	  -V, --ext-str=var[=str]       Set extVar string (str from env if omitted)
 //	      --ext-str-file=var[=filename]
-//	                               Set extVar string from a file (filename from env
-//	                               if omitted)
-//	      --ext-code=var[=code]    Set extVar code (code from env if omitted)
+//	                                Set extVar string from a file (filename from env
+//	                                if omitted)
+//	      --ext-code=var[=code]     Set extVar code (code from env if omitted)
 //	      --ext-code-file=var[=filename]
-//	                               Set extVar code from a file (filename from env if
-//	                               omitted)
-//	  -A, --tla-str=var[=str]      Set top-level arg string (str from env if
-//	                               omitted)
+//	                                Set extVar code from a file (filename from env
+//	                                if omitted)
+//	  -A, --tla-str=var[=str]       Set top-level arg string (str from env if
+//	                                omitted)
 //	      --tla-str-file=var[=filename]
-//	                               Set top-level arg string from a file (filename
-//	                               from env if omitted)
-//	      --tla-code=var[=code]    Set top-level arg code (code from env if omitted)
+//	                                Set top-level arg string from a file (filename
+//	                                from env if omitted)
+//	      --tla-code=var[=code]     Set top-level arg code (code from env if
+//	                                omitted)
 //	      --tla-code-file=var[=filename]
-//	                               Set top-level arg code from a file (filename from
-//	                               env if omitted)
-//	      --listen=":10389"        Listen address
-//	      --idle-timeout=15m       Idle timeout (0 to disable)
-//	      --write-timeout=30s      Write timeout (0 to disable)
-//	      --version                Print program version
+//	                                Set top-level arg code from a file (filename
+//	                                from env if omitted)
+//	      --listen=":10389"         Listen address
+//	      --idle-timeout=15m        Idle timeout (0 to disable)
+//	      --write-timeout=30s       Write timeout (0 to disable)
+//	      --log-level="info"        Log messages of level and higher
+//	                                (debug,info,warn,error)
+//	      --log-format="default"    Log output format (default,json,text)
+//	      --version                 Print program version
 package main
 
 import (
@@ -57,6 +61,7 @@ type CLI struct {
 	Entries string           `required:"" help:"Name of jsonnet file containing LDAP entries"`
 	Jnx     jnxkong.Config   `embed:""`
 	Server  ServerConfig     `embed:""`
+	Log     LogFlags         `embed:"" prefix:"log-"`
 	Version kong.VersionFlag `help:"Print program version"`
 }
 
